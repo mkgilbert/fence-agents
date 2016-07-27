@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import time
+from datetime import datetime
 import sys
 import subprocess
 import re
@@ -140,12 +141,12 @@ def reboot(conn, options):
     pm = PowerMan(options['--ip'], options['--ipport'])
     res = pm.off(options['--plug'])
     if res < 0:
-        fail(EC_STATUS)
+        logging.debug("reboot: power off failed!\n")
         return False
     time.sleep(2)
     res = pm.on(options['--plug'])
     if res < 0:
-        fail(EC_STATUS)
+        logging.debug("reboot: power on failed!\n")
         return False
     return True
 
@@ -157,51 +158,29 @@ def get_list(conn, options):
 
 def define_new_opts():
     # AS of right now, we don't even need this function--it's unused
-    all_opt["ipport"] = {
-        "getopt" : ":",
-        "longopt" : "ipport",
-        "help" : "--ipport=[port_number]       The port powerman is listening on.",
-        "required" : "1",
-        "shortdesc" : "powerman server port.",
-        "order" : 1,
-        "default": "10101"
-    }
-    all_opt["debug_file"] = {
-        "getopt" : ":",
-        "longopt" : "debug-file",
-        "help" : "--debug-file=[file path]	File to send debug messages to",
-        "required" : "0",
-        "shortdesc" : "File to send debug messages to",
-        "order" : 1,
-        "default": "/tmp/fence_powerman_debug.log"
-    }
-
     all_opt["hosts"] = {
         "getopt" : ":",
         "longopt" : "hosts",
         "help" : "--hosts=hostname1,hostname2,...	List of hosts this device should fence (must be reachable by Powerman)",
-        "required" : "1",
+        "required" : "0",
         "shortdesc" : "Fence-able hosts in the cluster",
         "order" : 1,
     }
-
 def main():
     device_opt = [
         'ipaddr',
-        'ipport',
         'hosts',
-        'port_as_ip',
         'no_password',
-        'debug_file',
-        'verbose'
+        'no_login',
     ]
 
     atexit.register(atexit_handler)
 
     define_new_opts()
+    
+    all_opt['ipport']['default'] = '10101'
 
     options = check_input(device_opt, process_input(device_opt))
-    options['--plug'] = 'elssd8,elssd9'
     logging.debug("Entered main() and received options: %s", str(options))
     docs = {}
     docs["shortdesc"] = "Fence Agent for Powerman"
@@ -221,8 +200,8 @@ Powerman management utility that was designed for LLNL systems."
                  options,
                  set_power_status,
                  get_power_status,
-                 get_list,
-                 None
+                 None,
+                 reboot
              )
     
     sys.exit(result)
