@@ -10,7 +10,7 @@ EXTRA_DIST		= $(SRC)
 
 sbin_SCRIPTS		= $(TARGET)
 
-man_MANS		= $(TARGET).8
+#man_MANS		= $(TARGET).8
 
 # this next line was in the cisco_ucs file, but there currently aren't tests defined
 # for this fencing device

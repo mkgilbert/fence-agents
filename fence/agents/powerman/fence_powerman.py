@@ -7,6 +7,15 @@ import re
 import atexit
 sys.path.append("@FENCEAGENTSLIBDIR@")
 from fencing import *
+from fencing import run_delay
+import logging
+
+
+#BEGIN_VERSION_GENERATION
+RELEASE_VERSION="Powerman Fencing Agent"
+REDHAT_COPYRIGHT=""
+BUILD_DATE=""
+#END_VERSION_GENERATION
 
 
 #### important!!! #######
@@ -43,7 +52,7 @@ class PowerMan:
             popen = subprocess.Popen(run_this, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             out = popen.communicate()
         except OSError as e:
-            print(e)
+	    logging.debug("_run command error: %s\n", e)
             sys.exit(1)
             
         result = out[0].decode().strip()
@@ -54,12 +63,12 @@ class PowerMan:
         try:
             out = self._run(cmd)
         except OSError as e:
-            print("Error: The command '--on' failed: %s" % e)
+            logging.debug("PowerMan Error: The command '--on' failed: %s", e)
         except ValueError as e:
-            print("Error: Popen: invalid arguments: %s" % e)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
         result = out[0]
         ret_code = out[1]
-        print(result)
+        logging.debug("%s", result)
         return ret_code
 
     def off(self, host):
@@ -67,9 +76,9 @@ class PowerMan:
         try:
             out = self._run(cmd)
         except OSError as e:
-            print("Error: The command '%s' failed: %s" % (cmd, e))
+            logging.debug("PowerMan Error: The command '%s' failed: %s", cmd, e)
         except ValueError as e:
-            print("Error: Popen: invalid arguments: %s" % e)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
         result = out[0]
         ret_code = out[1]
         print(result)
@@ -80,9 +89,9 @@ class PowerMan:
         try:
             out = self._run(cmd)
         except OSError as e:
-            print("Error: The command '%s' failed: %s" % (cmd, e))
+            logging.debug("PowerMan Error: The command '%s' failed: %s", cmd, e)
         except ValueError as e:
-            print("Error: Popen: invalid arguments: %s" % e)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
         result = out[0]
         ret_code = out[1]
         if ret_code < 0:
@@ -101,27 +110,21 @@ class PowerMan:
             return -1
 
 
-def _log(f, options):
-    f = open(str(f), 'w')
-    f.write(str(options))
-    f.close()
-
 def get_power_status(conn, options):
-    _log('/tmp/get_power.log', options)
-    del conn
-    pm = PowerMan(options['ipaddr'], options['ipport'])
+    logging.debug("get_power_status function:\noptions: %s", str(options))
+    pm = PowerMan(options['--ip'], options['--ipport'])
     status = pm.query(options['--plug'])
-    if isinstance(int, type(status)):
+    #if isinstance(int, type(status)):
         # query only returns ints on error
-        fail(EC_STATUS)
+    #    fail(EC_STATUS)
     return status
 
 
 def set_power_status(conn, options):
-    _log('/tmp/set_power.log', options)
+    logging.debug("set_power_status function:\noptions: %s", str(options))
     # delete this parameter--fencing_action passes it in, but we don't need it
     del conn 
-    pm = PowerMan(options['ipaddr'], options['ipport'])
+    pm = PowerMan(options['--ip'], options['--ipport'])
 
     action = options["--action"]
     if action == "on":
@@ -131,9 +134,10 @@ def set_power_status(conn, options):
 
     return
 
+
 def reboot(conn, options):
-    _log('/tmp/reboot.log', options)
-    pm = PowerMan(options['ipaddr'], options['ipport'])
+    logging.debug("reboot function:\noptions: %s", str(options))
+    pm = PowerMan(options['--ip'], options['--ipport'])
     res = pm.off(options['--plug'])
     if res < 0:
         fail(EC_STATUS)
@@ -146,32 +150,59 @@ def reboot(conn, options):
     return True
 
 def get_list(conn, options):
-    _log('/tmp/get_list.log', options)
-    # this is for
-    outlets = {}
+    logging.debug("get_list function:\noptions: %s", str(options))
+    outlets = {'elssd8': 'on', 'elssd9': 'on'}
     return outlets
 
 
 def define_new_opts():
     # AS of right now, we don't even need this function--it's unused
-    all_opt["server"] = {
-        "getopt" : "s:",
-        "longopt" : "server",
-        "help" : "--server=[hostname or ip]       The powerman server (usually the management node).",
+    all_opt["ipport"] = {
+        "getopt" : ":",
+        "longopt" : "ipport",
+        "help" : "--ipport=[port_number]       The port powerman is listening on.",
         "required" : "1",
-        "shortdesc" : "powerman server.",
-        "order" : 1 }
+        "shortdesc" : "powerman server port.",
+        "order" : 1,
+        "default": "10101"
+    }
+    all_opt["debug_file"] = {
+        "getopt" : ":",
+        "longopt" : "debug-file",
+        "help" : "--debug-file=[file path]	File to send debug messages to",
+        "required" : "0",
+        "shortdesc" : "File to send debug messages to",
+        "order" : 1,
+        "default": "/tmp/fence_powerman_debug.log"
+    }
 
+    all_opt["hosts"] = {
+        "getopt" : ":",
+        "longopt" : "hosts",
+        "help" : "--hosts=hostname1,hostname2,...	List of hosts this device should fence (must be reachable by Powerman)",
+        "required" : "1",
+        "shortdesc" : "Fence-able hosts in the cluster",
+        "order" : 1,
+    }
 
 def main():
-    device_opt = ['ipaddr', 'ipport', 'no_password', 'port_as_ip']
+    device_opt = [
+        'ipaddr',
+        'ipport',
+        'hosts',
+        'port_as_ip',
+        'no_password',
+        'debug_file',
+        'verbose'
+    ]
 
     atexit.register(atexit_handler)
 
-    # define_new_opts()
+    define_new_opts()
 
     options = check_input(device_opt, process_input(device_opt))
-
+    options['--plug'] = 'elssd8,elssd9'
+    logging.debug("Entered main() and received options: %s", str(options))
     docs = {}
     docs["shortdesc"] = "Fence Agent for Powerman"
     docs["longdesc"] = "This is a Pacemaker Fence Agent for the \
@@ -181,19 +212,17 @@ Powerman management utility that was designed for LLNL systems."
 
     ## Do the delay of the fence device before logging in
     ## Delay is important for two-node clusters fencing but we do not need to delay 'status' operations
-    if options["--action"] in ["off", "reboot"]:
-        time.sleep(int(options["--delay"]))
-    f = open('/tmp/fence_pm_log.out', 'w')
-    f.write(str(options))
-    f.write(str(result))
-    f.write('\n\n')
-    f.close()
+    run_delay(options)
+
+    #if options["--action"] in ["off", "reboot"]:
+    #    time.sleep(int(options["--delay"]))
     result = fence_action(
                  None,
                  options,
                  set_power_status,
                  get_power_status,
                  get_list,
+                 None
              )
     
     sys.exit(result)
