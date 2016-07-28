@@ -39,6 +39,7 @@ class PowerMan:
             "--server-host", 
             self.server_and_port
         ]
+        logging.debug("PowerMan: __init__: self.base_cmd = %s\n", self.base_cmd)
 
     def _test_run(self, cmd):
         run_this = self.base_cmd + cmd # add the 2 command lists together to get whole command to run
@@ -59,17 +60,24 @@ class PowerMan:
         result = out[0].decode().strip()
         return (result, popen.returncode)
 
+    def is_running(self):
+        cmd = ["-q"] # just check if we get a response from the server
+        result, ret_code = self._run(cmd)
+        logging.debug("PowerMan is_running? result = %s, ret_code = %s\n", result, ret_code)
+        if ret_code != 0:
+            return False
+        return True
+
     def on(self, host):
+        logging.debug("PowerMan on: %s\n", host)
         cmd = ["--on", host]
         try:
-            out = self._run(cmd)
+            result, ret_code = self._run(cmd)
         except OSError as e:
-            logging.debug("PowerMan Error: The command '--on' failed: %s", e)
+            logging.debug("PowerMan Error: The command '--on' failed: %s\n", e)
         except ValueError as e:
-            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
-        result = out[0]
-        ret_code = out[1]
-        logging.debug("%s", result)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
+        logging.debug("result: %s ret_code: %s\n", result, ret_code)
         return ret_code
 
     def off(self, host):
@@ -77,12 +85,12 @@ class PowerMan:
         try:
             out = self._run(cmd)
         except OSError as e:
-            logging.debug("PowerMan Error: The command '%s' failed: %s", cmd, e)
+            logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
         except ValueError as e:
-            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
         result = out[0]
         ret_code = out[1]
-        print(result)
+        logging.debug("%s\n", result)
         return ret_code
 
     def query(self, host):
@@ -90,9 +98,9 @@ class PowerMan:
         try:
             out = self._run(cmd)
         except OSError as e:
-            logging.debug("PowerMan Error: The command '%s' failed: %s", cmd, e)
+            logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
         except ValueError as e:
-            logging.debug("PowerMan Error: Popen: invalid arguments: %s", e)
+            logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
         result = out[0]
         ret_code = out[1]
         if ret_code < 0:
@@ -112,19 +120,26 @@ class PowerMan:
 
 
 def get_power_status(conn, options):
-    logging.debug("get_power_status function:\noptions: %s", str(options))
+    logging.debug("get_power_status function:\noptions: %s\n", str(options))
     pm = PowerMan(options['--ip'], options['--ipport'])
-    status = pm.query(options['--plug'])
-    #if isinstance(int, type(status)):
-        # query only returns ints on error
-    #    fail(EC_STATUS)
-    return status
+    # if Pacemaker is checking the status of the Powerman server...
+    if options['--action'] == 'monitor':
+        if pm.is_running():
+            logging.debug("Powerman is running\n")
+            return "on"
+        logging.debug("Powerman is NOT running\n")
+        return "off"
+    else:
+        status = pm.query(options['--plug'])
+        if isinstance(int, type(status)):
+            # query only returns ints on error
+            logging.debug("get_power_status: query returned %s\n", str(status))
+            fail(EC_STATUS)
+        return status
 
 
 def set_power_status(conn, options):
     logging.debug("set_power_status function:\noptions: %s", str(options))
-    # delete this parameter--fencing_action passes it in, but we don't need it
-    del conn 
     pm = PowerMan(options['--ip'], options['--ipport'])
 
     action = options["--action"]
@@ -178,7 +193,10 @@ def main():
 
     define_new_opts()
     
+    # redefine default values for the options given by fencing.py
     all_opt['ipport']['default'] = '10101'
+    all_opt['delay']['default'] = '3'
+    all_opt['power_wait']['default'] = '3'
 
     options = check_input(device_opt, process_input(device_opt))
     logging.debug("Entered main() and received options: %s", str(options))
@@ -193,8 +211,8 @@ Powerman management utility that was designed for LLNL systems."
     ## Delay is important for two-node clusters fencing but we do not need to delay 'status' operations
     run_delay(options)
 
-    #if options["--action"] in ["off", "reboot"]:
-    #    time.sleep(int(options["--delay"]))
+    if options["--action"] in ["off", "reboot"]:
+        time.sleep(int(options["--delay"]))
     result = fence_action(
                  None,
                  options,
