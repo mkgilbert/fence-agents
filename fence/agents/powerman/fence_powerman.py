@@ -20,15 +20,24 @@ BUILD_DATE=""
 
 
 #### important!!! #######
-# the command I need to implement somehow in this script is:
-# $ pm -h elssd1:10101 <option> <node>
-#       where option is something like --off, --on, --cycle
-#       and where node is lssd8, lssd9, or whatever names are given in
-#       powerman.conf (that is the key, because otherwise they won't work
 class PowerMan:
+    """Python wrapper for calling powerman commands
+    
+    This class makes calls to a powerman deamon for a cluster of computers.
+    The make-up of such a call looks something like:
+        $ pm -h elssd1:10101 <option> <node>
+    where option is something like --off, --on, --cycle and where node is 
+    elssd8, or whatever values are setup in powerman.conf (***this is key, 
+    because otherwise this code will not work!)
+    """
     program_name = "powerman"
 
     def __init__(self, server_name, port="10101"):
+        """
+        Args:
+            server_name: (string) host or ip of powerman server
+            port: (str) port number that the powerman server is listening on
+        """
         self.server_name = server_name
         self.port = port
         self.server_and_port = server_name + ":" + str(port)
@@ -39,17 +48,13 @@ class PowerMan:
             "--server-host", 
             self.server_and_port
         ]
-        logging.debug("PowerMan: __init__: self.base_cmd = %s\n", self.base_cmd)
-
-    def _test_run(self, cmd):
-        run_this = self.base_cmd + cmd # add the 2 command lists together to get whole command to run
-        out = subprocess.check_call(run_this)
-        return out
 
     def _run(self, cmd):
         # Args:
         #   cmd: (list) commands and arguments to pass to the program_name
-        run_this = self.base_cmd + cmd # add the 2 command lists together to get whole command to run
+
+        # add the 2 command lists together to get whole command to run
+        run_this = self.base_cmd + cmd 
         try:
             popen = subprocess.Popen(run_this, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             out = popen.communicate()
@@ -61,9 +66,9 @@ class PowerMan:
         return (result, popen.returncode)
 
     def is_running(self):
+        """simple query to see if powerman server is responding. Returns boolean"""
         cmd = ["-q"] # just check if we get a response from the server
         result, ret_code = self._run(cmd)
-        logging.debug("PowerMan is_running? result = %s, ret_code = %s\n", result, ret_code)
         if ret_code != 0:
             return False
         return True
@@ -81,28 +86,25 @@ class PowerMan:
         return ret_code
 
     def off(self, host):
+        logging.debug("PowerMan off: %s\n", host)
         cmd = ["--off", host]
         try:
-            out = self._run(cmd)
+            result, ret_code = self._run(cmd)
         except OSError as e:
             logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
         except ValueError as e:
             logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
-        result = out[0]
-        ret_code = out[1]
         logging.debug("%s\n", result)
         return ret_code
 
     def query(self, host):
         cmd = ["--query", host]
         try:
-            out = self._run(cmd)
+            result, ret_code = self._run(cmd)
         except OSError as e:
             logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
         except ValueError as e:
             logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
-        result = out[0]
-        ret_code = out[1]
         if ret_code < 0:
             # there was an error with the command
             return ret_code
@@ -165,14 +167,16 @@ def reboot(conn, options):
         return False
     return True
 
+
 def get_list(conn, options):
+    # TODO: make this function return a dictionary of hosts and their statuses
+    # by iterating over options['--plugs'] (I think???) and querying powerman
     logging.debug("get_list function:\noptions: %s", str(options))
     outlets = {'elssd8': 'on', 'elssd9': 'on'}
     return outlets
 
 
 def define_new_opts():
-    # AS of right now, we don't even need this function--it's unused
     all_opt["hosts"] = {
         "getopt" : ":",
         "longopt" : "hosts",
@@ -181,6 +185,8 @@ def define_new_opts():
         "shortdesc" : "Fence-able hosts in the cluster",
         "order" : 1,
     }
+
+
 def main():
     device_opt = [
         'ipaddr',
@@ -194,12 +200,14 @@ def main():
     define_new_opts()
     
     # redefine default values for the options given by fencing.py
+    # these 3 different values are derived from the lssd test cluster and may
+    # need to adjusted depending on how other systems fare
     all_opt['ipport']['default'] = '10101'
     all_opt['delay']['default'] = '3'
     all_opt['power_wait']['default'] = '3'
 
     options = check_input(device_opt, process_input(device_opt))
-    logging.debug("Entered main() and received options: %s", str(options))
+    logging.debug("fence_powerman.main: options: %s", str(options))
     docs = {}
     docs["shortdesc"] = "Fence Agent for Powerman"
     docs["longdesc"] = "This is a Pacemaker Fence Agent for the \
@@ -207,11 +215,11 @@ Powerman management utility that was designed for LLNL systems."
     docs["vendorurl"] = "https://github.com/chaos/powerman"
     show_docs(options, docs)
 
-    ## Do the delay of the fence device before logging in
-    ## Delay is important for two-node clusters fencing but we do not need to delay 'status' operations
+    ## Do the delay of the fence device 
     run_delay(options)
 
     if options["--action"] in ["off", "reboot"]:
+        # add extra delay if rebooting
         time.sleep(int(options["--delay"]))
     result = fence_action(
                  None,
