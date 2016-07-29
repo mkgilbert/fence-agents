@@ -59,7 +59,7 @@ class PowerMan:
             popen = subprocess.Popen(run_this, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             out = popen.communicate()
         except OSError as e:
-	    logging.debug("_run command error: %s\n", e)
+	        logging.debug("_run command error: %s\n", e)
             sys.exit(1)
             
         result = out[0].decode().strip()
@@ -80,8 +80,10 @@ class PowerMan:
             result, ret_code = self._run(cmd)
         except OSError as e:
             logging.debug("PowerMan Error: The command '--on' failed: %s\n", e)
+            return -1
         except ValueError as e:
             logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
+            return -1
         logging.debug("result: %s ret_code: %s\n", result, ret_code)
         return ret_code
 
@@ -92,8 +94,10 @@ class PowerMan:
             result, ret_code = self._run(cmd)
         except OSError as e:
             logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
+            return -1
         except ValueError as e:
             logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
+            return -1
         logging.debug("%s\n", result)
         return ret_code
 
@@ -103,8 +107,10 @@ class PowerMan:
             result, ret_code = self._run(cmd)
         except OSError as e:
             logging.debug("PowerMan Error: The command '%s' failed: %s\n", cmd, e)
+            return -1
         except ValueError as e:
             logging.debug("PowerMan Error: Popen: invalid arguments: %s\n", e)
+            return -1
         if ret_code < 0:
             # there was an error with the command
             return ret_code
@@ -177,14 +183,8 @@ def get_list(conn, options):
 
 
 def define_new_opts():
-    all_opt["hosts"] = {
-        "getopt" : ":",
-        "longopt" : "hosts",
-        "help" : "--hosts=hostname1,hostname2,...	List of hosts this device should fence (must be reachable by Powerman)",
-        "required" : "0",
-        "shortdesc" : "Fence-able hosts in the cluster",
-        "order" : 1,
-    }
+    """add elements to all_opt dict if you need to define new options"""
+    pass
 
 
 def main():
@@ -221,6 +221,8 @@ Powerman management utility that was designed for LLNL systems."
     if options["--action"] in ["off", "reboot"]:
         # add extra delay if rebooting
         time.sleep(int(options["--delay"]))
+    
+    # call the fencing.fence_action function, passing in my various fence functions
     result = fence_action(
                  None,
                  options,
